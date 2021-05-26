@@ -101,7 +101,7 @@ class GalvoCtrl:
 
         return True
 
-    def wrong_state(self, target_state):
+    def wrong_state(self, target_state):  #this checks 
         data_in = int(self.clear_buffer(clear_until="curr"))
         if target_state != data_in:
             print("metro m4 is in the wrong state.")
@@ -146,6 +146,7 @@ class GalvoCtrl:
         #takes in an array of settings and updates them from the default values 
         for setting in settings:
             self.write_settings(setting)
+            #provide a check for a potential transfer error 
             self.read_settings(setting)
         return 
 

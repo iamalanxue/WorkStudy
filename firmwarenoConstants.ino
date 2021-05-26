@@ -17,6 +17,7 @@
 #include <SPI.h>
 #include <SAMD51_InterruptTimer.h>
 
+
 /*************************
  * CONSTANT DECLARATIONS *
  *************************/
@@ -113,15 +114,12 @@ inline void     clear_serial_data(void);
 
 void dac2(uint16_t nx, uint16_t ny, uint8_t pinx, uint8_t piny);
 void myISR(void);
-
 /**************************************************
  * SETUP
  * 
  * Initializes serial, SPI, ADC and DAC chips.
  **************************************************/
 void setup() {
-
-
 
   // setup serial port
   Serial.begin(2000000);
@@ -158,7 +156,9 @@ void setup() {
 }
 
 void loop() {
-  if (state == STATE_WAIT_READ_BYTE) {
+  switch (state)
+  {
+  case STATE_WAIT_READ_BYTE:
     if (print_once == 0) {
       // print current state to serial port
       send_serial_info(SCAN, *scan_mode);
@@ -169,7 +169,7 @@ void loop() {
     if (Serial.available() >= 1) {
       // read setting_byte on serial port
 
-      digitalWrite(13, HIGH);
+      digitalWrite(13, HIGH); //for debugging to check if the arduino has recieved input
       setting_byte = Serial.read();
       clear_serial_data();
 
@@ -184,9 +184,8 @@ void loop() {
       print_once = 0;
       send_serial_info(GOTO, state);
     }
-
-  } else
-  if (state == STATE_SEND_SETTING) {
+    break;
+  case STATE_SEND_SETTING:
     if (print_once == 0) {
       send_serial_info(CURR, state);
       send_serial_info(TSEL, selected);
@@ -199,9 +198,8 @@ void loop() {
     state = STATE_WAIT_READ_BYTE;
     print_once = 0;
     send_serial_info(GOTO, state);
-  
-  } else
-  if (state == STATE_RECV_UPDATE_SETTING) {
+    break; 
+  case STATE_RECV_UPDATE_SETTING:
     if (print_once == 0) {
       send_serial_info(CURR, state);
       send_serial_info(TSEL, selected);
@@ -220,9 +218,8 @@ void loop() {
       print_once = 0;
       send_serial_info(GOTO, state);
     }
-
-  } else
-  if (state == STATE_PREVIEW_SCAN) {
+    break;
+  case STATE_PREVIEW_SCAN:
     if (print_once == 0) {
       send_serial_info(CURR, state);
       print_once++;
@@ -234,25 +231,77 @@ void loop() {
     state = STATE_WAIT_READ_BYTE;
     print_once = 0;
     send_serial_info(GOTO, state);
-
-  } else
-  if (state == STATE_ACQUISITION_SCAN) {
+    break; 
+  case STATE_ACQUISITION_SCAN:
     if (print_once == 0) {
       send_serial_info(CURR, state);
       print_once++;
     }
 
 // activate acquisition loops here.
-
+    for (uint16_t i_y = 0; i_y < n_y; i_y++) { //this for loop is for stepping up wave by one step 
+        dac_y = 768 + 6400 + (i_y * range_y * 6400 / (n_y - 1));
+        if (i_y % 2 == 0) {
+            for (uint16_t i_x = 0; i_x < n_x; i_x++) { //wave going in the right direction
+                dac_x = 768 + 6400 + (i_x * range_x * 6400 / (n_x - 1));
+                if (scan_mode == ACQUISITION) {
+                    dac2(dac_x, dac_y, 10, 11); 
+                    // cout << dac_x << ", " << dac_y << endl;
+                    continue;
+                } //if mode is acquisition do not perform the rising and falling edge 
+                if (i_x % 2 == 0) {
+                    for (int y = -2; y < 3; y++) {  //output rising edge for pwm wave 
+                        high = dac_y + y * del_s;
+                        //cout << "Rising Edge: " << high << endl;
+                        dac2(dac_x, high, 10, 11); 
+                        // cout << dac_x << ", " << high << endl; 
+                    }
+                }
+                else {
+                    for (int y = 2; y > -3; y--) { //output falling edge for pwm wave 
+                        low = dac_y + y * del_s;
+                        //cout << "Falling Edge: " << low << endl;
+                        dac2(dac_x, low, 10, 11); 
+                        // cout << dac_x << ", " << low<< endl;
+                    }
+                }
+            }
+        }
+        else {
+            for (uint16_t i_x = n_x; i_x > 0; i_x--) { //wave going in the left direction 
+                dac_x = 768 + 6400 + ((i_x - 1) * range_x * 6400 / (n_x - 1));
+                if (scan_mode == ACQUISITION || scan_mode == INTERLEAVED) {
+                    dac2(dac_x, dac_y, 10, 11); 
+                    // cout << dac_x << ", " << dac_y << endl; 
+                    continue; 
+                }
+                if (i_x % 2 == 0) {
+                    for (int y = -2; y < 3; y++) {  //output rising edge for pwm wave 
+                        high = dac_y + y * del_s;
+                        //cout << "Rising Edge: " << high << endl;
+                        dac2(dac_x, high, 10, 11); 
+                        // cout << dac_x << ", " << high << endl;
+                    }
+                }
+                else {
+                    for (int y = 2; y > -3; y--) { //output falling edge for pwm wave 
+                        low = dac_y + y * del_s;
+                        //cout << "Falling Edge: " << low << endl;
+                        dac2(dac_x, low, 10, 11); 
+                        // cout << dac_x << ", " << low << endl;
+                    }
+                }
+            }
+        }
+    }
     // end of the acquisition state
     
     // print next state to serial port
     state = STATE_RETURN;
     print_once = 0;
     send_serial_info(GOTO, state);
-
-  } else
-  if (state == STATE_RETURN) {
+    break; 
+  case STATE_RETURN:
     if (print_once == 0) {
       send_serial_info(CURR, state);
       print_once++;
@@ -262,7 +311,7 @@ void loop() {
     state = STATE_WAIT_READ_BYTE;
     print_once = 0;
     send_serial_info(GOTO, state);
-
+    break; 
   }
 }
 
@@ -375,3 +424,4 @@ void dac2(uint16_t nx, uint16_t ny, uint8_t pinx, uint8_t piny) {
 
   return;
 }
+
